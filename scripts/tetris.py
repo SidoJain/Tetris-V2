@@ -3,6 +3,8 @@ import random
 import pygame
 import requests
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 COLS, ROWS = 10, 20
 BLOCK = 30

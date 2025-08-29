@@ -27,6 +27,7 @@ def update_highscore():
         current_score = 0
     else:
         current_score = int(current_score)
+
     if isinstance(new_score, int) and new_score > current_score:
         redis_client.set(HIGH_SCORE_KEY, new_score)
         current_score = new_score
