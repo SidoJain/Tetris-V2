@@ -1,5 +1,5 @@
 pygame==2.6.1
 flask==3.1.2
 requests==2.32.5
-redis==6.4.0
-asgiref==3.9.1
+upstash_redis==1.4.0
+dotenv==0.9.9
