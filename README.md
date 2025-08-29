@@ -1,6 +1,6 @@
 # Tetris
 
-A classic Tetris game implemented in Python using the Pygame library. The game features smooth piece movement, rotation, line clearing, scoring, and a highscore server integration.
+A classic Tetris game implemented in Python using the Pygame library. The game features smooth piece movement, rotation, line clearing, scoring, and a highscore server integration using a Flask backend and Redis storage.
 
 ## Features
 
