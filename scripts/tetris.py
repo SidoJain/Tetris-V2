@@ -417,7 +417,6 @@ def main() -> None:
                                     highscore = fetch_highscore()
                                     fall_timer = 0
                                     drop_fast = False
-                                    fps_target = FPS
                                     wait = False
 
         screen.fill(BLACK)
