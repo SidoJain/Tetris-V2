@@ -1,46 +1,31 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
+import redis
 import os
-import json
-from threading import Lock
 
 app = Flask(__name__)
+redis_client = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:5000"))
 
-STORE_FILE = os.path.join(os.path.dirname(__file__), "highscore.json")
-_store_lock = Lock()
+HIGH_SCORE_KEY = "tetris_highscore"
 
-def read_highscore() -> int:
-    with _store_lock:
-        if not os.path.exists(STORE_FILE):
-            return 0
-        try:
-            with open(STORE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return int(data.get("highscore", 0))
-        except Exception:
-            return 0
+@app.route('/highscore', methods=['GET'])
+async def get_highscore():
+    score = await redis_client.get(HIGH_SCORE_KEY)
+    if score is None:
+        score = 0
+    else:
+        score = int(score)
+    return jsonify({"highscore": score})
 
-def write_highscore(value: int) -> int:
-    with _store_lock:
-        try:
-            with open(STORE_FILE, "w", encoding="utf-8") as f:
-                json.dump({"highscore": int(value)}, f)
-        except Exception:
-            pass
-        return int(value)
-
-@app.get("/highscore")
-def get_highscore():
-    return jsonify({"highscore": read_highscore()})
-
-@app.post("/highscore")
-def post_highscore():
-    try:
-        payload = request.get_json(force=True) or {}
-        score = int(payload.get("score", 0))
-    except Exception:
-        return jsonify({"error": "invalid payload"}), 400
-
-    current = read_highscore()
-    if score > current:
-        current = write_highscore(score)
-    return jsonify({"highscore": current})
+@app.route('/highscore', methods=['POST'])
+async def update_highscore():
+    data = await request.get_json()
+    new_score = data.get("score", 0)
+    current_score = await redis_client.get(HIGH_SCORE_KEY)
+    if current_score is None:
+        current_score = 0
+    else:
+        current_score = int(current_score)
+    if isinstance(new_score, int) and new_score > current_score:
+        await redis_client.set(HIGH_SCORE_KEY, new_score)
+        current_score = new_score
+    return jsonify({"highscore": current_score})
