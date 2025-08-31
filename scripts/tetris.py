@@ -4,6 +4,8 @@ import pygame
 import requests
 import os
 import numpy as np
+import threading
+import math
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -214,6 +216,9 @@ def update_highscore(score: int) -> int | None:
         pass
     return None
 
+def fetch_highscore_async(result_container: dict) -> None:
+    result_container["highscore"] = fetch_highscore()
+
 def compute_drop_interval_ms(score: int, drop_fast: bool) -> int:
     base = int(BASE_INTERVAL_MS * (0.995 ** max(0, score // 10)))
     base = max(MIN_INTERVAL_MS, base)
@@ -330,6 +335,13 @@ def game_over_animation(screen: pygame.surface.Surface, big_font: pygame.font.Fo
         alpha += increment
         pygame.time.wait(60)
 
+def show_loading_screen(screen: pygame.Surface, font: pygame.font.Font) -> None:
+    screen.fill(BLACK)
+    loading_text = font.render("Connecting to server...", True, WHITE)
+    text_rect = loading_text.get_rect(center=(WIN_W // 2, WIN_H // 2))
+    screen.blit(loading_text, text_rect)
+    pygame.display.flip()
+
 def main() -> None:
     pygame.init()
     pygame.mixer.init()
@@ -341,20 +353,33 @@ def main() -> None:
     font = pygame.font.SysFont("arial", 20, bold=True)
     big_font = pygame.font.SysFont("arial", 36, bold=True)
     small_font = pygame.font.SysFont("arial", 16)
-    sounds = load_sounds()
+
+    show_loading_screen(screen, font)
+    result = {"highscore": None}
+    thread = threading.Thread(target=fetch_highscore_async, args=(result,))
+    thread.start()
+
+    loading = True
+    while loading:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit(0)
+
+        if not thread.is_alive():
+            loading = False
+        clock.tick(30)
+    highscore = result["highscore"] if result["highscore"] is not None else 0
 
     board = create_board()
     queue = []
     current = spawn_piece(queue)
     next_p = spawn_piece(queue)
-
+    sounds = load_sounds()
     score = 0
-    highscore = fetch_highscore()
-
     fall_timer = 0
     running = True
     drop_fast = False
-
     fps_target = FPS
     while running:
         dt = clock.tick(fps_target)
