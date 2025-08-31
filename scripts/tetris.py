@@ -5,7 +5,6 @@ import requests
 import os
 import numpy as np
 import threading
-import math
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -16,6 +15,9 @@ SIDE_W = 200
 WIN_W, WIN_H = GRID_W + SIDE_W, GRID_H
 
 FPS = 60
+MIN_FPS = 30
+MAX_FPS = 240
+FPS_STEP = 5
 FALL_INTERVAL_MS = 500
 BASE_INTERVAL_MS = 650
 MIN_INTERVAL_MS = 90
@@ -240,7 +242,7 @@ def draw_sidebar(surf: pygame.surface.Surface, font: pygame.font.Font, small_fon
     x_pad, y = GRID_W + PANEL_PAD, PANEL_PAD
     w = SIDE_W - 2 * PANEL_PAD
 
-    next_rect = pygame.Rect(x_pad, y, w, 150)
+    next_rect = pygame.Rect(x_pad, y, w, 160)
     cx, cy = draw_panel(surf, next_rect, "Next", font)
     content_w = next_rect.w - 2 * PANEL_PAD
     available_h = next_rect.h - (cy - next_rect.y) - PANEL_PAD
@@ -369,7 +371,7 @@ def main() -> None:
         if not thread.is_alive():
             loading = False
         clock.tick(30)
-    highscore = result["highscore"] if result["highscore"] is not None else 0
+    highscore = result["highscore"] if result["highscore"] else 0
 
     board = create_board()
     queue = []
@@ -432,9 +434,9 @@ def main() -> None:
                         break
 
                 elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
-                    fps_target = max(30, fps_target - 5)
+                    fps_target = max(MIN_FPS, fps_target - FPS_STEP)
                 elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
-                    fps_target = min(240, fps_target + 5)
+                    fps_target = min(MAX_FPS, fps_target + FPS_STEP)
 
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_DOWN:
