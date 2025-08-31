@@ -447,13 +447,18 @@ def main() -> None:
             if valid(board, moved):
                 current = moved
             else:
+                sounds["drop"].play()
                 lock_piece(board, current)
+                full_rows = np.where(np.all(board != 0, axis=1))[0]
                 board, cleared = clear_lines(board)
                 if cleared:
+                    flash_lines(screen, full_rows)
+                    sounds["clear"].play()
                     score += score_for_lines(cleared)
                 current = next_p
                 next_p = spawn_piece(queue)
                 if not valid(board, current):
+                    sounds["gameover"].play()
                     new_hs = update_highscore(score)
                     if isinstance(new_hs, int):
                         highscore = new_hs
