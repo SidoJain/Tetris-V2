@@ -21,6 +21,7 @@ A classic Tetris game implemented in Python using the Pygame library. The game f
 - Pygame
 - Requests
 - Python-dotenv
+- numpy
 
 All requirements will be installed through requirements.txt
 
