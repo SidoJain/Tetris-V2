@@ -3,6 +3,7 @@ import random
 import pygame
 import requests
 import os
+import numpy as np
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -150,32 +151,30 @@ def spawn_piece(queue: list[str]) -> Piece:
         queue.extend(new_bag())
     return Piece(queue.pop(0))
 
-def create_board() -> list[list[int]]:
-    return [[0 for _ in range(COLS)] for _ in range(ROWS)]
+def create_board() -> np.ndarray:
+    return np.zeros((ROWS, COLS), dtype=object)
 
-def valid(board: list[list[int]], piece: Piece) -> bool:
+def valid(board: np.ndarray, piece: Piece) -> bool:
     for x, y in piece.blocks():
         if x < 0 or x >= COLS or y >= ROWS:
             return False
-        if y >= 0 and board[y][x] != 0:
+        if y >= 0 and board[y, x] != 0:
             return False
     return True
 
-def lock_piece(board: list[list[int]], piece: Piece) -> None:
+def lock_piece(board: np.ndarray, piece: Piece) -> None:
     for x, y in piece.blocks():
         if 0 <= y < ROWS:
-            board[y][x] = piece.color
+            board[y, x] = piece.color
 
-def clear_lines(board: list[list[int]]) -> int:
-    full_rows = [row for row in range(ROWS) if all(board[row][col] != 0 for col in range(COLS))]
-    cleared = len(full_rows)
-    if cleared == 0:
-        return 0
-
-    for r in full_rows:
-        del board[r]
-        board.insert(0, [0 for _ in range(COLS)])
-    return cleared
+def clear_lines(board: np.ndarray) -> tuple[np.ndarray, int]:
+    full_rows = np.where(np.all(board != 0, axis=1))[0]
+    num_cleared = len(full_rows)
+    if num_cleared > 0:
+        board = np.delete(board, full_rows, axis=0)
+        new_rows = np.zeros((num_cleared, board.shape[1]), dtype=board.dtype)
+        board = np.vstack([new_rows, board])
+    return board, num_cleared
 
 def score_for_lines(n: int) -> int:
     return {1: 100, 2: 300, 3: 500, 4: 800}.get(n, 0)
@@ -186,11 +185,11 @@ def draw_grid(surf: pygame.surface.Surface) -> None:
     for y in range(ROWS + 1):
         pygame.draw.line(surf, GRID_LINE, (0, y * BLOCK), (GRID_W, y * BLOCK), 1)
 
-def draw_board(surf: pygame.surface.Surface, board):
+def draw_board(surf: pygame.surface.Surface, board) -> None:
     for y in range(ROWS):
         for x in range(COLS):
-            if board[y][x] != 0:
-                pygame.draw.rect(surf, board[y][x], pygame.Rect(x * BLOCK + 1, y * BLOCK + 1, BLOCK - 2, BLOCK - 2))
+            if board[y, x] != 0:
+                pygame.draw.rect(surf, board[y, x], pygame.Rect(x * BLOCK + 1, y * BLOCK + 1, BLOCK - 2, BLOCK - 2))
 
 def draw_piece(surf: pygame.surface.Surface, piece: Piece) -> None:
     for x, y in piece.blocks():
@@ -294,8 +293,47 @@ def draw_sidebar(surf: pygame.surface.Surface, font: pygame.font.Font, small_fon
     for i, text in enumerate(controls):
         surf.blit(small_font.render(text, True, WHITE), (cx2, cy2 + i * 20))
 
+def load_sounds() -> dict[str, pygame.mixer.Sound]:
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    sound_folder = os.path.join(base_path, "..", "public")
+
+    sounds = {
+        "clear": pygame.mixer.Sound(os.path.join(sound_folder, "clear_line.wav")),
+        "gameover": pygame.mixer.Sound(os.path.join(sound_folder, "game_over.wav")),
+        "drop": pygame.mixer.Sound(os.path.join(sound_folder, "drop.wav")),
+    }
+    return sounds
+
+def flash_lines(surf: pygame.Surface, lines: np.ndarray) -> None:
+    flash_color = (255, 255, 255)
+    flash_duration = 150
+    end_time = pygame.time.get_ticks() + flash_duration
+    while pygame.time.get_ticks() < end_time:
+        for y in lines:
+            for x in range(COLS):
+                rect = pygame.Rect(x * BLOCK + 1, y * BLOCK + 1, BLOCK - 2, BLOCK - 2)
+                pygame.draw.rect(surf, flash_color, rect)
+        pygame.display.flip()
+
+def game_over_animation(screen: pygame.surface.Surface, big_font: pygame.font.Font, font: pygame.font.Font) -> None:
+    overlay = pygame.Surface((WIN_W, WIN_H), pygame.SRCALPHA)
+    alpha = 0
+    increment = 5
+    while alpha <= 45:
+        overlay.fill((0, 0, 0, alpha))
+        screen.blit(overlay, (0, 0))
+        msg1 = big_font.render("Game Over", True, WHITE)
+        msg2 = font.render("Press R to Restart or ESC to Quit", True, WHITE)
+        screen.blit(msg1, (GRID_W // 2 - msg1.get_width() // 2, GRID_H // 2 - 40))
+        screen.blit(msg2, (GRID_W // 2 - msg2.get_width() // 2, GRID_H // 2 + 10))
+        pygame.display.flip()
+        alpha += increment
+        pygame.time.wait(60)
+
 def main() -> None:
     pygame.init()
+    pygame.mixer.init()
+
     screen = pygame.display.set_mode((WIN_W, WIN_H))
     pygame.display.set_caption("Tetris")
     clock = pygame.time.Clock()
@@ -303,6 +341,7 @@ def main() -> None:
     font = pygame.font.SysFont("arial", 20, bold=True)
     big_font = pygame.font.SysFont("arial", 36, bold=True)
     small_font = pygame.font.SysFont("arial", 16)
+    sounds = load_sounds()
 
     board = create_board()
     queue = []
@@ -352,14 +391,19 @@ def main() -> None:
                     moved = current
                     while valid(board, moved.moved(dy=1)):
                         moved = moved.moved(dy=1)
+                    sounds["drop"].play()
                     current = moved
                     lock_piece(board, current)
-                    cleared = clear_lines(board)
+                    full_rows = np.where(np.all(board != 0, axis=1))[0]
+                    board, cleared = clear_lines(board)
                     if cleared:
+                        flash_lines(screen, full_rows)
+                        sounds["clear"].play()
                         score += score_for_lines(cleared)
                     current = next_p
                     next_p = spawn_piece(queue)
                     if not valid(board, current):
+                        sounds["gameover"].play()
                         break
 
                 elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
@@ -379,7 +423,7 @@ def main() -> None:
                 current = moved
             else:
                 lock_piece(board, current)
-                cleared = clear_lines(board)
+                board, cleared = clear_lines(board)
                 if cleared:
                     score += score_for_lines(cleared)
                 current = next_p
@@ -389,15 +433,7 @@ def main() -> None:
                     if isinstance(new_hs, int):
                         highscore = new_hs
 
-                    overlay = pygame.Surface((WIN_W, WIN_H), pygame.SRCALPHA)
-                    overlay.fill((0, 0, 0, 180))
-                    screen.blit(overlay, (0, 0))
-                    msg1 = big_font.render("Game Over", True, WHITE)
-                    msg2 = font.render("Press R to Restart or ESC to Quit", True, WHITE)
-                    screen.blit(msg1, (GRID_W // 2 - msg1.get_width() // 2, GRID_H // 2 - 40))
-                    screen.blit(msg2, (GRID_W // 2 - msg2.get_width() // 2, GRID_H // 2 + 10))
-                    pygame.display.flip()
-
+                    game_over_animation(screen, big_font, font)
                     wait = True
                     while wait:
                         for e in pygame.event.get():

@@ -13,6 +13,7 @@ A classic Tetris game implemented in Python using the Pygame library. The game f
 - Game over screen with options to restart or quit.
 - Robust piece and board collision detection for valid moves.
 - Responsive keyboard controls for move, rotate, soft drop, and hard drop.
+- Music and animations for moves.
 
 ## Requirements
 
